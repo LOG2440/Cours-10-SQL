@@ -1,0 +1,19 @@
+{
+  "name": "sqd",
+  "version": "1.0.0",
+  "description": "Projet de base de données relationnelle pour le cours LOG2440",
+  "license": "ISC",
+  "author": "Nikolay Radoev",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env index.js",
+    "seed": "node --env-file-if-exists=.env db/seed.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "pg": "^8.13.1",
+    "swagger-jsdoc": "^6.3.0",
+    "swagger-ui-express": "^5.0.1"
+  }
+}

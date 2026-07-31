@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persistance des donnees : LOG2440</title>
+</head>
+
+<body>
+    <h1>Persistance des donnees : exemple de forum (SQL)</h1>
+    <p><strong>Documentation interactive de l'API (Swagger UI) : <a href="/api">/api</a></strong> - toutes les routes peuvent y etre testees directement.</p>
+    <p>Memes routes disponibles sous <code>/forum</code> (PostgreSQL) et <code>/forum-sqlite</code> (SQLite), pour comparer la syntaxe.</p>
+    <ul>
+        <li><code>GET /forum/users</code> - SELECT de base</li>
+        <li><code>GET /forum/posts/:userId</code> - WHERE</li>
+        <li><code>GET /forum/posts-with-authors</code> - INNER JOIN</li>
+        <li><code>GET /forum/posts-without-comments</code> - LEFT JOIN</li>
+        <li><code>GET /forum/most-active-users</code> - JOIN + GROUP BY + COUNT</li>
+        <li><code>POST /forum/posts/:postId/comments</code> - INSERT + RETURNING</li>
+        <li><code>PATCH /forum/posts/:id</code> - UPDATE avec WHERE</li>
+        <li><code>GET /forum/search/vulnerable?q=...</code> et <code>/forum/search/secure?q=...</code> - injection SQL</li>
+        <li><code>DELETE /forum/posts/:id</code> - ON DELETE CASCADE</li>
+    </ul>
+    <p>Voir README.md pour les commandes de test.</p>
+</body>
+
+</html>
