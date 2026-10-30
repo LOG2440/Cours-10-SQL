@@ -194,7 +194,7 @@ module.exports = swaggerJSDoc(swaggerOptions);
  * /forum/search/vulnerable:
  *   get:
  *     summary: "Rechercher des posts par titre - VERSION VULNERABLE a l'injection SQL"
- *     description: "Requete construite par concatenation de chaînes. Essayer q = %' OR '1'='1 pour retourner tous les posts."
+ *     description: "Requete construite par concatenation de chaînes. Choisir un exemple dans la liste du paramètre q pour tester une injection ou déclencher une erreur du SGBD."
  *     tags:
  *       - GET
  *     parameters:
@@ -203,10 +203,33 @@ module.exports = swaggerJSDoc(swaggerOptions);
  *         schema:
  *           type: string
  *         description: "Terme de recherche"
- *         example: "SQL"
+ *         examples:
+ *           normal:
+ *             summary: "Recherche normale (200)"
+ *             value: "SQL"
+ *           injection:
+ *             summary: "Injection : retourne tous les posts (200)"
+ *             value: "%' OR '1'='1"
+ *           syntaxe:
+ *             summary: "Apostrophe seule : erreur de syntaxe, 42601 (500)"
+ *             value: "'"
+ *           unionColonnes:
+ *             summary: "UNION avec le mauvais nombre de colonnes : 42601 (500)"
+ *             value: "%' UNION SELECT 1 --"
+ *           colonneInexistante:
+ *             summary: "Colonne inexistante : 42703 (500)"
+ *             value: "%' OR nope = 1 --"
+ *           tableInexistante:
+ *             summary: "Table inexistante : 42P01 (500)"
+ *             value: "%' UNION SELECT 1, 'x' FROM nope --"
+ *           doublon:
+ *             summary: "INSERT injecté avec un username déjà pris : UNIQUE, 23505 (409)"
+ *             value: "%'; INSERT INTO users (username, email) VALUES ('alice', 'doublon@example.com') --"
  *     responses:
  *       200:
  *         description: "Posts dont le titre contient le terme (ou plus, en cas d'injection...)"
+ *       409:
+ *         description: "Une instruction injectée viole une contrainte UNIQUE"
  *       500:
  *         description: "Erreur SQL (une injection mal formee casse la requete)"
  */
@@ -238,6 +261,7 @@ module.exports = swaggerJSDoc(swaggerOptions);
  * /forum/posts/{postId}/comments:
  *   post:
  *     summary: Ajouter un commentaire à un post (INSERT + RETURNING)
+ *     description: "Choisir un exemple dans la liste du corps de la requête pour déclencher une erreur du SGBD. Pour un post inexistant (23503, 404), utiliser postId = 99 avec l'exemple valide."
  *     tags:
  *       - POST
  *     parameters:
@@ -262,9 +286,35 @@ module.exports = swaggerJSDoc(swaggerOptions);
  *             required:
  *               - userId
  *               - body
- *           example:
- *             userId: 2
- *             body: "Nouveau commentaire !"
+ *           examples:
+ *             valide:
+ *               summary: "Commentaire valide (201)"
+ *               value:
+ *                 userId: 2
+ *                 body: "Nouveau commentaire !"
+ *             utilisateurInexistant:
+ *               summary: "Utilisateur inexistant : clé étrangère, 23503 (400)"
+ *               value:
+ *                 userId: 999
+ *                 body: "Nouveau commentaire !"
+ *             bodyManquant:
+ *               summary: "body manquant : NOT NULL, 23502 (400)"
+ *               value:
+ *                 userId: 2
+ *             userIdTexte:
+ *               summary: "userId n'est pas un entier : 22P02 (400)"
+ *               value:
+ *                 userId: "abc"
+ *                 body: "Nouveau commentaire !"
+ *             userIdTropGrand:
+ *               summary: "userId trop grand pour INTEGER : 22003 (400)"
+ *               value:
+ *                 userId: 99999999999
+ *                 body: "Nouveau commentaire !"
+ *             userIdManquant:
+ *               summary: "userId manquant : validation du routeur, sans passer par le SGBD (400)"
+ *               value:
+ *                 body: "Nouveau commentaire !"
  *     responses:
  *       201:
  *         description: "Commentaire créé, avec les valeurs générées par le SGBD (id, created_at)"
@@ -273,7 +323,9 @@ module.exports = swaggerJSDoc(swaggerOptions);
  *             schema:
  *               $ref: '#/components/schemas/Commentaire'
  *       400:
- *         description: "Insertion refusée par le SGBD (post ou utilisateur inexistant : violation de clé étrangère)"
+ *         description: "Requête invalide : userId manquant ou inexistant, body manquant, identifiant qui n'est pas un entier valide"
+ *       404:
+ *         description: "Aucun post avec cet identifiant (violation de clé étrangère)"
  */
 
 /**
@@ -302,8 +354,15 @@ module.exports = swaggerJSDoc(swaggerOptions);
  *                 type: string
  *             required:
  *               - title
- *           example:
- *             title: "Titre corrigé"
+ *           examples:
+ *             valide:
+ *               summary: "Titre valide (200)"
+ *               value:
+ *                 title: "Titre corrigé"
+ *             titreVide:
+ *               summary: "Titre vide : CHECK, 23514 (400)"
+ *               value:
+ *                 title: "   "
  *     responses:
  *       200:
  *         description: "Post modifié"
@@ -311,6 +370,8 @@ module.exports = swaggerJSDoc(swaggerOptions);
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Post'
+ *       400:
+ *         description: "Titre vide (violation de la contrainte CHECK)"
  *       404:
  *         description: "Aucun post avec cet identifiant"
  *       500:
@@ -360,6 +421,8 @@ module.exports = swaggerJSDoc(swaggerOptions);
  *     responses:
  *       200:
  *         description: "Utilisateur et tout son contenu supprimés (transaction validée)"
+ *       404:
+ *         description: "Aucun utilisateur avec cet identifiant"
  *       500:
  *         description: "Une etape a echoué : transaction annulée (ROLLBACK), rien n'a changé dans la base"
  */

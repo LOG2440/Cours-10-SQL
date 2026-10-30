@@ -1,6 +1,11 @@
 const pool = require("../db/postgres");
 
-// Même interface que SqliteForumService : les deux sont interchangeables.
+// Erreur avec un statut HTTP : le routeur n'a pas à connaître les codes de PostgreSQL.
+function httpError(status, message) {
+  return Object.assign(new Error(message), { status });
+}
+
+// Même interface que SqliteForumService : les deux sont interchangeables sauf pour la gestion des erreurs.
 class PostgresForumService {
   // SELECT de base
   async getUsers() {
@@ -57,8 +62,24 @@ class PostgresForumService {
   // VERSION VULNERABLE : requête construite par concatenation de chaines
   async searchPostsVulnerable(term) {
     const sql = `SELECT id, title FROM posts WHERE title LIKE '%${term}%'`;
-    const result = await pool.query(sql);
-    return result.rows;
+    try {
+      const result = await pool.query(sql);
+      return result.rows;
+    } catch (e) {
+      // Ces messages révèlent la structure de la base : à ne pas exposer dans une vraie application.
+      switch (e.code) {
+        case "23505": // unique_violation : e.constraint indique quelle contrainte UNIQUE
+          throw httpError(409, `Valeur déjà utilisée (contrainte ${e.constraint})`);
+        case "42601": // syntax_error
+          throw httpError(500, `Requête mal formée : ${e.message}`);
+        case "42703": // undefined_column
+          throw httpError(500, `Colonne inexistante : ${e.message}`);
+        case "42P01": // undefined_table
+          throw httpError(500, `Table inexistante : ${e.message}`);
+        default:
+          throw e;
+      }
+    }
   }
 
   // VERSION CORRIGÉE : requête parametrée avec $1
@@ -69,20 +90,41 @@ class PostgresForumService {
 
   // INSERT avec RETURNING
   async addComment(postId, userId, body) {
-    const result = await pool.query(
-      "INSERT INTO comments (post_id, user_id, body) VALUES ($1, $2, $3) RETURNING *",
-      [postId, userId, body]
-    );
-    return result.rows[0];
+    try {
+      const result = await pool.query(
+        "INSERT INTO comments (post_id, user_id, body) VALUES ($1, $2, $3) RETURNING *",
+        [postId, userId, body]
+      );
+      return result.rows[0];
+    } catch (e) {
+      // e.code contient le code d'erreur standard SQLSTATE retourné par PostgreSQL
+      switch (e.code) {
+        case "23503": // foreign_key_violation : e.constraint indique quelle clé étrangère
+          if (e.constraint === "comments_post_id_fkey") throw httpError(404, "Post introuvable");
+          throw httpError(400, "Utilisateur introuvable");
+        case "23502": // not_null_violation : e.column indique quelle colonne
+          throw httpError(400, `La colonne ${e.column} est obligatoire`);
+        case "22P02": // invalid_text_representation : ex. "abc" pour une colonne INTEGER
+        case "22003": // numeric_value_out_of_range : valeur trop grande pour une colonne INTEGER
+          throw httpError(400, "Les identifiants doivent être des entiers valides");
+        default:
+          throw e;
+      }
+    }
   }
 
   // UPDATE avec WHERE : retourne la rangee modifiée, ou undefined
   async updatePostTitle(id, title) {
-    const result = await pool.query(
-      "UPDATE posts SET title = $1 WHERE id = $2 RETURNING *",
-      [title, id]
-    );
-    return result.rows[0];
+    try {
+      const result = await pool.query(
+        "UPDATE posts SET title = $1 WHERE id = $2 RETURNING *",
+        [title, id]
+      );
+      return result.rows[0];
+    } catch (e) {
+      if (e.code === "23514") throw httpError(400, "Le titre ne peut pas être vide"); // check_violation
+      throw e;
+    }
   }
 
   // DELETE : demontre ON DELETE CASCADE sur comments
@@ -100,9 +142,9 @@ class PostgresForumService {
       await client.query("DELETE FROM posts WHERE user_id = $1", [userId]); // + leurs commentaires (ON DELETE CASCADE)
       // DEMO ROLLBACK : décommenter la ligne suivante pour faire échouer la transaction.
       // await client.query("INSERT INTO users (username, email) VALUES ('bob', 'doublon@example.com')");
-      await client.query("DELETE FROM users WHERE id = $1", [userId]);
+      const result = await client.query("DELETE FROM users WHERE id = $1", [userId]);
       await client.query("COMMIT");
-      return true;
+      return result.rowCount > 0;
     } catch (e) {
       await client.query("ROLLBACK");
       throw e;
