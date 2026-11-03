@@ -56,7 +56,7 @@ function createForumRouter(service) {
     try {
       res.json(await service.searchPostsVulnerable(req.query.q || ""));
     } catch (e) {
-      res.status(500).json({ error: "Erreur SQL : " + e.message });
+      res.status(e.status || 500).json({ error: "Erreur SQL : " + e.message });
     }
   });
 
@@ -71,12 +71,13 @@ function createForumRouter(service) {
   // Body JSON attendu : { "userId": 2, "body": "..." }
   router.post("/posts/:postId/comments", async (req, res) => {
     const { userId, body } = req.body;
+    // user_id accepte NULL, ce qui n'est pas logique à la création du commentaire.
+    if (!userId ) return res.status(400).json({ error: "userId est obligatoire" });
     try {
       const comment = await service.addComment(req.params.postId, userId, body);
       res.status(201).json(comment);
     } catch (e) {
-      // Violation de clé étrangère : post ou utilisateur inexistant.
-      res.status(400).json({ error: "Insertion refusée par le SGBD : " + e.message });
+      res.status(e.status || 400).json({ error: "Insertion refusée par le SGBD : " + e.message });
     }
   });
 
@@ -87,7 +88,7 @@ function createForumRouter(service) {
       if (!post) return res.status(404).json({ error: "Post introuvable" });
       res.json(post);
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      res.status(e.status || 500).json({ error: e.message });
     }
   });
 
@@ -104,7 +105,8 @@ function createForumRouter(service) {
   // TRANSACTION : supprime un utilisateur et tout son contenu (BEGIN / COMMIT / ROLLBACK)
   router.delete("/users/:id", async (req, res) => {
     try {
-      await service.deleteUserWithContent(req.params.id);
+      const deleted = await service.deleteUserWithContent(req.params.id);
+      if (!deleted) return res.status(404).json({ error: "Utilisateur introuvable" });
       res.json({ message: `Utilisateur ${req.params.id} et tout son contenu supprimés (transaction validée)` });
     } catch (e) {
       // Une etape a echoué : la transaction est annulée, rien n'a changé dans la base.

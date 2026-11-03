@@ -12,7 +12,7 @@ CREATE TABLE users (
 CREATE TABLE posts (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id),
-  title VARCHAR(200) NOT NULL,
+  title VARCHAR(200) NOT NULL CHECK (length(trim(title)) > 0),
   body TEXT NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT now()
 );

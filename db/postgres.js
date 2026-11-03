@@ -13,4 +13,8 @@ const pool = new Pool({
   connectionTimeoutMillis: 2000, // échoue rapidement si la base ne répond pas en 2 secondes
 });
 
+// Une connexion inactive peut tomber (ex. redémarrage de PostgreSQL) :
+// sans ce gestionnaire, l'événement "error" ferait planter le processus Node.
+pool.on("error", (e) => console.error("Erreur du pool PostgreSQL :", e.message));
+
 module.exports = pool;
